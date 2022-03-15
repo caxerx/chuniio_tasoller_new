@@ -5,7 +5,6 @@ This is created by Rust but there are many `unsafe` is used. Memory leaks may ap
 
 ## Setup Instruction
 1. Place `usb-server.exe`, `chuniio_x86.dll`, `chuniio_x64.dll` into bin folder.
-    > Please make sure they are placed in the same folder and the working directory are in the same folder. Placing them in different folder will not work.
 2. Copy 2 sets of `segatools.ini` to `segatools_32.ini` and `segatools_64.ini`
 3. Add this to `segatools_32.ini`
     ```ini

@@ -7,13 +7,9 @@ version = "0.1.0"
 
 [dependencies]
 raw_sync = "0.1.5"
-rusb = "0.9"
 shared_memory = "0.12.4"
-tokio = {version = "1", features = ["full"]}
-windows = "0.33.0"
-
-[build]
-target = "x86_64-pc-windows-msvc"
+windows = "0.34.0"
+windows-sys = {version = "0.34.0", features = ["Win32_Foundation", "Win32_UI_WindowsAndMessaging"]}
 
 [lib]
 crate-type = ["cdylib"]

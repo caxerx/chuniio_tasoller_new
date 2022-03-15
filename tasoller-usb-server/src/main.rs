@@ -1,8 +1,10 @@
 use rusb::{DeviceHandle, GlobalContext};
 use shared_memory::*;
-use std::{thread::sleep, time::Duration};
+use std::{fmt::Display, thread::sleep, time::Duration};
 
-fn init_usb(device: DeviceHandle<GlobalContext>) {
+use windows_sys::Win32::UI::WindowsAndMessaging::*;
+
+async fn init_usb(device: DeviceHandle<GlobalContext>) {
     let led_smem = create_led_shared_memory();
     let mut usb_out: [u8; 240] = [0; 240];
 
@@ -11,6 +13,7 @@ fn init_usb(device: DeviceHandle<GlobalContext>) {
     let mut input_status_smem = create_input_shared_memory();
 
     loop {
+        // Map led status from shared memory
         unsafe {
             let led_status = led_smem.as_slice();
             for i in 0..240 {
@@ -18,14 +21,19 @@ fn init_usb(device: DeviceHandle<GlobalContext>) {
             }
         }
 
-        device
-            .write_bulk(0x03, &usb_out, Duration::from_millis(100))
-            .expect("[chuniio] Error to write to tasoller");
+        // Write led status to usb
+        match device.write_bulk(0x03, &usb_out, Duration::from_micros(1)) {
+            Ok(_) => (),
+            Err(e) => println!("Error when write to tasoller {}", e),
+        }
 
-        device
-            .read_interrupt(0x84, usb_in[0..].as_mut(), Duration::from_millis(100))
-            .expect("[chuniio] Failed to read data from tasoller");
+        // Read input status from tasoller
+        match device.read_interrupt(0x84, usb_in[0..].as_mut(), Duration::from_micros(1)) {
+            Ok(_) => (),
+            Err(e) => println!("Failed to read data from tasoller {}", e),
+        }
 
+        // Write pressure status to shared memory
         unsafe {
             let input_status_mut = input_status_smem.as_slice_mut();
             for (i, el) in usb_in.iter().enumerate() {
@@ -38,10 +46,13 @@ fn init_usb(device: DeviceHandle<GlobalContext>) {
 }
 
 fn create_led_shared_memory() -> Shmem {
-    let mut shmem = match ShmemConf::new().size(240).flink("tasoller_led").create() {
+    let mut shmem = match ShmemConf::new().size(240).os_id("tasoller_led").create() {
         Ok(m) => m,
-        Err(ShmemError::LinkExists) => ShmemConf::new().flink("tasoller_led").open().unwrap(),
-        Err(_e) => panic!("[tasoller-server] Failed to open shared memory"),
+        Err(ShmemError::MappingIdExists) => ShmemConf::new().os_id("tasoller_led").open().unwrap(),
+        Err(e) => {
+            fatal(&e);
+            panic!()
+        }
     };
 
     shmem.set_owner(true);
@@ -51,16 +62,24 @@ fn create_led_shared_memory() -> Shmem {
         usb_out[0] = 0x42;
         usb_out[1] = 0x4C;
         usb_out[2] = 0x00;
+        for i in 3..240 {
+            usb_out[i] = 0x00;
+        }
     }
 
     return shmem;
 }
 
 fn create_input_shared_memory() -> Shmem {
-    let mut shmem = match ShmemConf::new().size(36).flink("tasoller_input").create() {
+    let mut shmem = match ShmemConf::new().size(36).os_id("tasoller_input").create() {
         Ok(m) => m,
-        Err(ShmemError::LinkExists) => ShmemConf::new().flink("tasoller_input").open().unwrap(),
-        Err(_e) => panic!("[tasoller-server] Failed to open shared memory"),
+        Err(ShmemError::MappingIdExists) => {
+            ShmemConf::new().os_id("tasoller_input").open().unwrap()
+        }
+        Err(e) => {
+            fatal(&e);
+            panic!()
+        }
     };
 
     shmem.set_owner(true);
@@ -68,25 +87,38 @@ fn create_input_shared_memory() -> Shmem {
     return shmem;
 }
 
+fn fatal(e: &dyn Display) {
+    unsafe {
+        MessageBoxA(
+            0,
+            format!("{}\0", e).as_bytes().as_ptr(),
+            b"Tasoller-Server\0".as_ptr(),
+            MB_ICONERROR,
+        );
+    }
+}
+
 #[tokio::main]
 async fn main() {
-    std::fs::remove_file("tasoller_input").ok();
-    std::fs::remove_file("tasoller_led").ok();
-
-    println!("Tasoller USB Server Started");
+    println!("Tasoller Server Started");
 
     let mut device = match rusb::open_device_with_vid_pid(0x1ccf, 0x2333) {
         Some(dev) => dev,
-        None => panic!("[chuniio] Cannot find tasoller"),
+        None => {
+            fatal(&"Cannot find tasoller");
+            panic!()
+        }
     };
 
-    device
-        .claim_interface(0)
-        .expect("[chuniio] Unable to open tasoller");
+    match device.claim_interface(0) {
+        Ok(_) => (),
+        Err(_) => {
+            fatal(&"Unable to open tasoller");
+            panic!()
+        }
+    }
 
-    let blocking_task = tokio::task::spawn_blocking(|| {
-        init_usb(device);
-    });
+    let task = tokio::spawn(init_usb(device));
 
-    blocking_task.await.unwrap();
+    task.await.ok();
 }
