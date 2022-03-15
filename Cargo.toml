@@ -1,0 +1,3 @@
+[workspace]
+
+members = ["tasoller-usb-server", "tasoller-chuniio-x86", "tasoller-chuniio-x64"]
