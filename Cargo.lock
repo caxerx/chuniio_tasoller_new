@@ -362,9 +362,8 @@ version = "0.1.0"
 dependencies = [
  "raw_sync",
  "shared_memory",
- "tokio",
- "windows 0.34.0",
- "windows-sys 0.34.0",
+ "windows 0.33.0",
+ "windows-sys 0.33.0",
 ]
 
 [[package]]
@@ -502,6 +501,19 @@ dependencies = [
  "windows_i686_msvc 0.32.0",
  "windows_x86_64_gnu 0.32.0",
  "windows_x86_64_msvc 0.32.0",
+]
+
+[[package]]
+name = "windows-sys"
+version = "0.33.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "43dbb096663629518eb1dfa72d80243ca5a6aca764cae62a2df70af760a9be75"
+dependencies = [
+ "windows_aarch64_msvc 0.33.0",
+ "windows_i686_gnu 0.33.0",
+ "windows_i686_msvc 0.33.0",
+ "windows_x86_64_gnu 0.33.0",
+ "windows_x86_64_msvc 0.33.0",
 ]
 
 [[package]]

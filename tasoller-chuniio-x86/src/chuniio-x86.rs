@@ -4,16 +4,12 @@ use std::{
     sync::{Arc, RwLock},
     time::Duration,
 };
-use tokio::task::JoinHandle;
 use windows::core::HRESULT;
 
 use windows_sys::Win32::UI::WindowsAndMessaging::*;
 
 static mut LED_SHMEM: Option<Arc<RwLock<Shmem>>> = None;
 static mut INPUT_SHMEM: Option<Arc<RwLock<Shmem>>> = None;
-
-static mut THREAD_READY: bool = false;
-static mut THREAD_JOIN_HANDLER: Option<Arc<RwLock<JoinHandle<()>>>> = None;
 
 fn fatal(e: &dyn Display, id: u8) {
     unsafe {
@@ -60,41 +56,34 @@ pub unsafe extern "C" fn chuni_io_slider_init() -> HRESULT {
 
 #[no_mangle]
 pub extern "C" fn chuni_io_slider_start(callback: unsafe extern "C" fn(data: *const u8)) {
-    unsafe { THREAD_READY = true }
-    let join_handle = tokio::spawn(async move {
-        while unsafe { THREAD_READY } {
-            let input_shmem_rwl = unsafe {
-                match &INPUT_SHMEM {
-                    None => {
-                        fatal(&"INPUT_SHMEM is not initialized", 21);
-                        panic!()
-                    }
-                    Some(t) => t,
-                }
-            };
-
-            match input_shmem_rwl.try_read() {
-                Err(e) => {
-                    fatal(&e, 31);
+    std::thread::spawn(move || loop {
+        let input_shmem_rwl = unsafe {
+            match &INPUT_SHMEM {
+                None => {
+                    fatal(&"INPUT_SHMEM is not initialized", 21);
                     panic!()
                 }
-                Ok(input_shmem) => unsafe {
-                    let mut report_status = [0u8; 32];
-                    let input = std::slice::from_raw_parts(input_shmem.as_ptr(), 36);
-                    for i in 0..32 {
-                        report_status[if i % 2 == 0 { 30 - i } else { 32 - i }] = input[i + 4];
-                    }
-                    callback(report_status.as_ptr());
-                },
+                Some(t) => t,
             }
+        };
 
-            std::thread::sleep(Duration::from_nanos(1_000_000))
+        match input_shmem_rwl.try_read() {
+            Err(e) => {
+                fatal(&e, 31);
+                panic!()
+            }
+            Ok(input_shmem) => unsafe {
+                let mut report_status = [0u8; 32];
+                let input = std::slice::from_raw_parts(input_shmem.as_ptr(), 36);
+                for i in 0..32 {
+                    report_status[if i % 2 == 0 { 30 - i } else { 32 - i }] = input[i + 4];
+                }
+                callback(report_status.as_ptr());
+            },
         }
-    });
 
-    unsafe {
-        THREAD_JOIN_HANDLER = Some(Arc::new(RwLock::new(join_handle)));
-    }
+        std::thread::sleep(Duration::from_nanos(1_000_000))
+    });
 }
 
 #[no_mangle]
@@ -132,19 +121,7 @@ pub extern "C" fn chuni_io_slider_set_leds(rgb: *const u8) {
 }
 
 #[no_mangle]
-pub extern "C" fn chuni_io_slider_stop() {
-    match unsafe { &THREAD_JOIN_HANDLER } {
-        None => (),
-        Some(thread_handle_rwl) => {
-            match thread_handle_rwl.try_read() {
-                Err(_) => (),
-                Ok(thread_handle) => {
-                    thread_handle.abort();
-                }
-            };
-        }
-    };
-}
+pub extern "C" fn chuni_io_slider_stop() {}
 
 // ====== PLACEHOLDER ONLY ======
 #[no_mangle]
