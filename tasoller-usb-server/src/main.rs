@@ -1,8 +1,6 @@
 use rusb::{DeviceHandle, GlobalContext};
 use shared_memory::*;
-use std::{fmt::Display, thread::sleep, time::Duration};
-
-use windows_sys::Win32::UI::WindowsAndMessaging::*;
+use std::{thread::sleep, time::Duration};
 
 async fn init_usb(device: DeviceHandle<GlobalContext>) {
     let led_smem = create_led_shared_memory();
@@ -49,8 +47,8 @@ fn create_led_shared_memory() -> Shmem {
     let mut shmem = match ShmemConf::new().size(240).os_id("tasoller_led").create() {
         Ok(m) => m,
         Err(ShmemError::MappingIdExists) => ShmemConf::new().os_id("tasoller_led").open().unwrap(),
-        Err(e) => {
-            fatal(&e);
+        Err(_) => {
+            println!("Failed to create shared memory: tasoller_led");
             panic!()
         }
     };
@@ -76,8 +74,8 @@ fn create_input_shared_memory() -> Shmem {
         Err(ShmemError::MappingIdExists) => {
             ShmemConf::new().os_id("tasoller_input").open().unwrap()
         }
-        Err(e) => {
-            fatal(&e);
+        Err(_) => {
+            println!("Failed to create shared memory: tasoller_input");
             panic!()
         }
     };
@@ -87,17 +85,6 @@ fn create_input_shared_memory() -> Shmem {
     return shmem;
 }
 
-fn fatal(e: &dyn Display) {
-    unsafe {
-        MessageBoxA(
-            0,
-            format!("{}\0", e).as_bytes().as_ptr(),
-            b"Tasoller-Server\0".as_ptr(),
-            MB_ICONERROR,
-        );
-    }
-}
-
 #[tokio::main]
 async fn main() {
     println!("Tasoller Server Started");
@@ -105,7 +92,7 @@ async fn main() {
     let mut device = match rusb::open_device_with_vid_pid(0x1ccf, 0x2333) {
         Some(dev) => dev,
         None => {
-            fatal(&"Cannot find tasoller");
+            println!("Cannot find tasoller");
             panic!()
         }
     };
@@ -113,7 +100,7 @@ async fn main() {
     match device.claim_interface(0) {
         Ok(_) => (),
         Err(_) => {
-            fatal(&"Unable to open tasoller");
+            println!("Cannot open tasoller");
             panic!()
         }
     }
